@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Daftar Wajah Karyawan</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+:root{--blue:#1a73e8;--dark:#0d47a1;--green:#10b981;--red:#ef4444;--yellow:#f59e0b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;color:#333}
+
+/* TOPBAR */
+.topbar{
+  background:linear-gradient(135deg,var(--blue),var(--dark));
+  color:white;padding:14px 20px;
+  display:flex;align-items:center;justify-content:space-between;
+  box-shadow:0 2px 10px rgba(0,0,0,.2);
+}
+.topbar h1{font-size:17px;font-weight:700}
+.topbar p{font-size:11px;opacity:.8;margin-top:2px}
+.topbar-link{color:rgba(255,255,255,.8);font-size:12px;text-decoration:none;font-weight:600}
+.topbar-link:hover{color:white}
+
+.main{padding:16px;max-width:900px;margin:0 auto}
+
+/* STATUS MODEL */
+.model-status{
+  background:white;border-radius:14px;padding:14px 16px;
+  margin-bottom:16px;display:flex;align-items:center;gap:12px;
+  box-shadow:0 2px 8px rgba(0,0,0,.06);
+}
+.model-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.model-dot.ok{background:var(--green)}
+.model-dot.loading{background:var(--yellow);animation:pulse .8s infinite}
+.model-dot.err{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.model-txt{font-size:13px;font-weight:600;color:#444}
+.model-sub{font-size:11px;color:#888;margin-top:2px}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+
+/* CARD */
+.card{background:white;border-radius:14px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:16px}
+.card-title{font-size:14px;font-weight:700;color:#444;margin-bottom:14px;display:flex;align-items:center;gap:6px}
+
+/* FORM DAFTAR */
+.form-row{margin-bottom:12px}
+.form-row label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:5px}
+.form-row select,
+.form-row input{
+  width:100%;padding:9px 12px;border:2px solid #e0e0e0;border-radius:9px;
+  font-size:13px;outline:none;transition:border-color .2s;
+}
+.form-row select:focus,
+.form-row input:focus{border-color:var(--blue)}
+
+/* KAMERA DAFTAR */
+.reg-cam-wrap{
+  position:relative;border-radius:12px;overflow:hidden;
+  background:#111;width:100%;aspect-ratio:4/3;margin-bottom:10px;
+}
+#regVideo{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
+#regCanvas{position:absolute;top:0;left:0;width:100%;height:100%;transform:scaleX(-1)}
+.face-guide-sm{
+  position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  width:55%;aspect-ratio:1/1;border-radius:50%;
+  border:3px solid rgba(255,255,255,.6);pointer-events:none;
+}
+.face-guide-sm.ok{border-color:var(--green)}
+.face-guide-sm.scanning{border-color:#00d4ff;animation:pulse-b .8s infinite}
+@keyframes pulse-b{0%,100%{border-color:#00d4ff}50%{border-color:#fff}}
+.reg-status{
+  position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(transparent,rgba(0,0,0,.7));
+  color:white;font-size:11px;font-weight:600;padding:14px 8px 7px;text-align:center;
+}
+
+/* PROGRESS FOTO */
+.photo-progress{margin-bottom:10px}
+.photo-dots{display:flex;gap:6px;justify-content:center;margin-bottom:6px}
+.dot{
+  width:20px;height:20px;border-radius:50%;
+  border:2px solid #e0e0e0;background:white;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;transition:all .3s;
+}
+.dot.done{background:var(--green);border-color:var(--green);color:white}
+.dot.active{background:var(--blue);border-color:var(--blue);color:white;animation:pulse .6s infinite}
+.photo-count{font-size:11px;color:#888;text-align:center}
+
+/* BUTTONS */
+.btn{width:100%;padding:11px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;margin-bottom:8px}
+.btn-p{background:linear-gradient(135deg,var(--blue),var(--dark));color:white}
+.btn-p:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(26,115,232,.35)}
+.btn-p:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-g{background:var(--green);color:white}
+.btn-g:hover{background:#059669}
+.btn-outline{background:white;border:2px solid #e0e0e0;color:#555}
+.btn-outline:hover{border-color:#aaa}
+.btn-red{background:var(--red);color:white;font-size:12px}
+.btn-red:hover{background:#dc2626}
+
+/* DAFTAR KARYAWAN */
+.emp-list{max-height:380px;overflow-y:auto}
+.emp-item{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 12px;border-radius:10px;
+  border:1.5px solid #f0f0f0;margin-bottom:8px;
+  transition:border-color .2s;
+}
+.emp-item:hover{border-color:#e0e0e0}
+.emp-avatar{
+  width:40px;height:40px;border-radius:50%;
+  background:linear-gradient(135deg,var(--blue),var(--dark));
+  display:flex;align-items:center;justify-content:center;
+  color:white;font-weight:700;font-size:15px;flex-shrink:0;
+  overflow:hidden;
+}
+.emp-avatar img{width:100%;height:100%;object-fit:cover}
+.emp-info{flex:1}
+.emp-name{font-size:13px;font-weight:700}
+.emp-dept{font-size:11px;color:#888;margin-top:2px}
+.emp-face-badge{
+  font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;
+}
+.face-ok{background:#d1fae5;color:#065f46}
+.face-no{background:#fee2e2;color:#991b1b}
+.btn-sm{
+  padding:5px 10px;border:none;border-radius:7px;font-size:11px;
+  font-weight:600;cursor:pointer;transition:all .2s;flex-shrink:0;
+}
+.btn-sm-blue{background:var(--blue);color:white}
+.btn-sm-red{background:var(--red);color:white}
+
+/* HINTS */
+.hint{padding:9px 12px;border-radius:9px;font-size:12px;font-weight:500;margin-bottom:10px;line-height:1.5}
+.hint.blue{background:#eff6ff;color:#1e40af}
+.hint.green{background:#d1fae5;color:#065f46}
+.hint.yellow{background:#fef3c7;color:#92400e}
+.hint.red{background:#fee2e2;color:#991b1b}
+
+/* LOADING */
+.loading{text-align:center;padding:20px;color:#888}
+.sp{width:28px;height:28px;border:3px solid #e0e0e0;border-top-color:var(--blue);border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:#1a1a1a;color:white;padding:10px 20px;border-radius:30px;
+  font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;
+  white-space:nowrap;
+}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1>👤 Admin — Daftar Wajah Karyawan</h1>
+    <p>Daftarkan foto wajah untuk sistem absensi face recognition</p>
+  </div>
+  <a href="index.html" class="topbar-link">← Halaman Absensi</a>
+</div>
+
+<div class="main">
+
+  <!-- STATUS MODEL -->
+  <div class="model-status">
+    <div class="model-dot loading" id="modelDot"></div>
+    <div>
+      <div class="model-txt" id="modelTxt">Memuat model AI...</div>
+      <div class="model-sub" id="modelSub">Harap tunggu, proses ini hanya sekali saat halaman dibuka</div>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <!-- PANEL KIRI: DAFTAR WAJAH -->
+    <div>
+      <div class="card">
+        <div class="card-title">📸 Daftarkan Wajah Karyawan</div>
+
+        <div class="form-row">
+          <label>Pilih Karyawan</label>
+          <select id="empSelect">
+            <option value="">-- Memuat data karyawan... --</option>
+          </select>
+        </div>
+
+        <div class="hint blue" id="regHint">Pilih karyawan, lalu aktifkan kamera untuk mengambil foto wajah.</div>
+
+        <div class="reg-cam-wrap" id="regCamWrap" style="display:none">
+          <video id="regVideo" autoplay playsinline muted></video>
+          <canvas id="regCanvas"></canvas>
+          <div class="face-guide-sm" id="regGuide"></div>
+          <div class="reg-status" id="regStatus">Memulai kamera...</div>
+        </div>
+
+        <!-- Progress foto -->
+        <div class="photo-progress" id="photoProgress" style="display:none">
+          <div class="photo-dots" id="photoDots"></div>
+          <div class="photo-count" id="photoCount">0 / 5 foto diambil</div>
+        </div>
+
+        <button class="btn btn-outline" id="btnStartCam" onclick="startRegCam()">📷 Aktifkan Kamera</button>
+        <button class="btn btn-p" id="btnCapture" onclick="capturePhoto()" style="display:none" disabled>📸 Ambil Foto</button>
+        <button class="btn btn-g" id="btnSave" onclick="saveFaceData()" style="display:none" disabled>💾 Simpan Data Wajah</button>
+        <button class="btn btn-outline" id="btnReset" onclick="resetCapture()" style="display:none">🔄 Ulangi</button>
+      </div>
+
+      <!-- INFO -->
+      <div class="card">
+        <div class="card-title">💡 Panduan Pengambilan Foto</div>
+        <div style="font-size:12px;color:#555;line-height:1.8">
+          <div>✅ Ambil <b>5 foto</b> dari sudut berbeda</div>
+          <div>✅ Pastikan <b>pencahayaan cukup</b></div>
+          <div>✅ Wajah harus <b>jelas dan tidak tertutup</b></div>
+          <div>✅ Coba posisi: lurus, sedikit kiri, sedikit kanan, agak atas, agak bawah</div>
+          <div>⚠️ Hindari foto dengan kacamata hitam / masker</div>
+          <div>⚠️ Jarak ideal dari kamera: <b>30–60 cm</b></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL KANAN: DAFTAR KARYAWAN -->
+    <div>
+      <div class="card">
+        <div class="card-title">👥 Status Pendaftaran Wajah</div>
+        <div id="empListWrap">
+          <div class="loading"><div class="sp"></div><p>Memuat...</p></div>
+        </div>
+        <button class="btn btn-outline" onclick="loadEmployees()" style="margin-top:4px">🔄 Refresh</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// ⚙️ KONFIGURASI
+// ============================================================
+var APPS_SCRIPT_URL = 'GANTI_DENGAN_URL_APPS_SCRIPT_ANDA';
+var MODEL_URL = './models';
+// ============================================================
+
+var A = {
+  modelsLoaded: false,
+  regStream: null,
+  regInterval: null,
+  capturedDescriptors: [],
+  PHOTOS_NEEDED: 5,
+  currentEmp: null,
+};
+
+// ── INIT ─────────────────────────────────────────────────────
+async function init() {
+  await loadModels();
+  await loadEmployees();
+}
+
+async function loadModels() {
+  setModelStatus('loading','Memuat model AI face-api.js...','Proses ini hanya sekali saat halaman pertama dibuka');
+  try {
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    A.modelsLoaded = true;
+    setModelStatus('ok','Model AI berhasil dimuat ✅','Siap mendaftarkan wajah karyawan');
+  } catch(e) {
+    setModelStatus('err','Gagal memuat model AI ❌','Pastikan folder /models ada di GitHub Pages. Lihat README.');
+  }
+}
+
+function setModelStatus(type, txt, sub) {
+  var dot=g('modelDot'), t=g('modelTxt'), s=g('modelSub');
+  if(dot) dot.className='model-dot '+type;
+  if(t)   t.textContent=txt;
+  if(s)   s.textContent=sub;
+}
+
+// ── LOAD KARYAWAN ─────────────────────────────────────────────
+async function loadEmployees() {
+  g('empListWrap').innerHTML='<div class="loading"><div class="sp"></div><p>Memuat...</p></div>';
+  try {
+    var data = await api('getEmployeesWithFaceStatus', {});
+    renderEmployeeList(data);
+    renderEmpSelect(data);
+  } catch(e) {
+    g('empListWrap').innerHTML='<div class="hint red">Gagal memuat data. Cek URL Apps Script.</div>';
+  }
+}
+
+function renderEmpSelect(data) {
+  var sel = g('empSelect');
+  sel.innerHTML = '<option value="">-- Pilih Karyawan --</option>';
+  data.forEach(function(e) {
+    var opt = document.createElement('option');
+    opt.value = JSON.stringify({barcode:e.barcode, nama:e.nama, departemen:e.departemen});
+    opt.textContent = e.nama + ' (' + e.departemen + ')' + (e.hasFace ? ' ✅' : ' ❌');
+    sel.appendChild(opt);
+  });
+}
+
+function renderEmployeeList(data) {
+  if (!data || !data.length) {
+    g('empListWrap').innerHTML='<div class="hint yellow">Belum ada karyawan. Tambahkan di sheet DataKaryawan.</div>';
+    return;
+  }
+  var html = '<div class="emp-list">' + data.map(function(e) {
+    var initial = e.nama.charAt(0).toUpperCase();
+    return '<div class="emp-item">'+
+      '<div class="emp-avatar">'+initial+'</div>'+
+      '<div class="emp-info">'+
+        '<div class="emp-name">'+e.nama+'</div>'+
+        '<div class="emp-dept">'+e.departemen+' • '+e.barcode+'</div>'+
+      '</div>'+
+      '<span class="emp-face-badge '+(e.hasFace?'face-ok':'face-no')+'">'+(e.hasFace?'✅ Terdaftar':'❌ Belum')+'</span>'+
+      (e.hasFace?'<button class="btn-sm btn-sm-red" onclick="deleteFace(\''+e.barcode+'\',\''+e.nama+'\')">Hapus</button>':'')+
+    '</div>';
+  }).join('') + '</div>';
+  g('empListWrap').innerHTML = html;
+}
+
+// ── KAMERA DAFTAR ─────────────────────────────────────────────
+async function startRegCam() {
+  var selVal = g('empSelect').value;
+  if (!selVal) { showToast('⚠️ Pilih karyawan dulu!'); return; }
+  if (!A.modelsLoaded) { showToast('❌ Model AI belum dimuat'); return; }
+
+  A.currentEmp = JSON.parse(selVal);
+  A.capturedDescriptors = [];
+
+  g('regCamWrap').style.display = 'block';
+  g('photoProgress').style.display = 'block';
+  g('btnStartCam').style.display = 'none';
+  g('btnCapture').style.display = 'block';
+  g('btnReset').style.display = 'block';
+  renderPhotoDots(0);
+  setRegHint('Posisikan wajah '+A.currentEmp.nama+' di dalam lingkaran, lalu klik Ambil Foto.','blue');
+
+  var tries = [
+    {video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}},
+    {video:{facingMode:'user'}},{video:true}
+  ];
+  var stream = null;
+  for (var i=0;i<tries.length;i++) {
+    try { stream = await navigator.mediaDevices.getUserMedia(tries[i]); break; }
+    catch(e) { if(e.name==='NotAllowedError'){setRegStatus('⛔ Izin kamera ditolak');return;} }
+  }
+  if (!stream) { setRegStatus('❌ Kamera gagal'); return; }
+
+  A.regStream = stream;
+  var vid = g('regVideo'); vid.srcObject = stream;
+  await vid.play().catch(function(){});
+  startRegScanLoop(vid);
+}
+
+function startRegScanLoop(vid) {
+  if (A.regInterval) clearInterval(A.regInterval);
+  A.regInterval = setInterval(async function() {
+    if (!vid||vid.readyState<2) return;
+    try {
+      var det = await faceapi
+        .detectSingleFace(vid, new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:0.4}))
+        .withFaceLandmarks().withFaceDescriptor();
+      var guide = g('regGuide');
+      if (det) {
+        if (guide) guide.className='face-guide-sm ok';
+        setRegStatus('✅ Wajah terdeteksi — klik Ambil Foto');
+        g('btnCapture').disabled = false;
+      } else {
+        if (guide) guide.className='face-guide-sm scanning';
+        setRegStatus('🔍 Cari wajah...');
+        g('btnCapture').disabled = true;
+      }
+    } catch(e) {}
+  }, 500);
+}
+
+async function capturePhoto() {
+  var vid = g('regVideo');
+  if (!vid||vid.readyState<2) { showToast('Kamera belum siap'); return; }
+
+  g('btnCapture').disabled = true;
+  setRegStatus('📸 Mengambil foto...');
+
+  try {
+    var det = await faceapi
+      .detectSingleFace(vid, new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:0.4}))
+      .withFaceLandmarks().withFaceDescriptor();
+
+    if (!det) { showToast('⚠️ Wajah tidak terdeteksi, coba lagi'); g('btnCapture').disabled=false; return; }
+
+    A.capturedDescriptors.push(Array.from(det.descriptor));
+    beep();
+
+    var n = A.capturedDescriptors.length;
+    renderPhotoDots(n);
+    g('photoCount').textContent = n + ' / ' + A.PHOTOS_NEEDED + ' foto diambil';
+    setRegStatus('✅ Foto ke-'+n+' berhasil!');
+    setRegHint('Foto '+n+'/'+A.PHOTOS_NEEDED+' berhasil. '+(n<A.PHOTOS_NEEDED?'Ubah posisi wajah lalu ambil foto lagi.':'Semua foto selesai! Klik Simpan.'),'green');
+
+    if (n >= A.PHOTOS_NEEDED) {
+      g('btnCapture').style.display='none';
+      g('btnSave').style.display='block';
+      g('btnSave').disabled=false;
+      if(A.regInterval){clearInterval(A.regInterval);A.regInterval=null;}
+    } else {
+      setTimeout(function(){ g('btnCapture').disabled=false; setRegStatus('Siap ambil foto ke-'+(n+1)); },800);
+    }
+  } catch(e) { showToast('Error: '+e.message); g('btnCapture').disabled=false; }
+}
+
+async function saveFaceData() {
+  if (!A.capturedDescriptors.length || !A.currentEmp) { showToast('Tidak ada foto'); return; }
+  g('btnSave').disabled = true;
+  g('btnSave').textContent = '⏳ Menyimpan...';
+  setRegHint('Menyimpan data wajah ke Google Sheets...','blue');
+
+  try {
+    var result = await api('saveFaceDescriptors', {
+      barcode: A.currentEmp.barcode,
+      nama: A.currentEmp.nama,
+      departemen: A.currentEmp.departemen,
+      descriptors: A.capturedDescriptors
+    });
+    if (result && result.status === 'sukses') {
+      showToast('✅ Data wajah '+A.currentEmp.nama+' berhasil disimpan!');
+      setRegHint('✅ Data wajah '+A.currentEmp.nama+' berhasil disimpan!','green');
+      resetCapture();
+      loadEmployees();
+    } else {
+      showToast('❌ Gagal: ' + (result ? result.pesan : 'Unknown error'));
+      g('btnSave').disabled=false; g('btnSave').textContent='💾 Simpan Data Wajah';
+    }
+  } catch(e) {
+    showToast('❌ Error: '+e.message);
+    g('btnSave').disabled=false; g('btnSave').textContent='💾 Simpan Data Wajah';
+  }
+}
+
+function resetCapture() {
+  if (A.regInterval){clearInterval(A.regInterval);A.regInterval=null;}
+  if (A.regStream){A.regStream.getTracks().forEach(function(t){t.stop();});A.regStream=null;}
+  var v=g('regVideo'); if(v) v.srcObject=null;
+  A.capturedDescriptors=[]; A.currentEmp=null;
+  g('regCamWrap').style.display='none';
+  g('photoProgress').style.display='none';
+  g('btnStartCam').style.display='block';
+  g('btnCapture').style.display='none';
+  g('btnSave').style.display='none';
+  g('btnSave').textContent='💾 Simpan Data Wajah';
+  g('btnReset').style.display='none';
+  setRegHint('Pilih karyawan, lalu aktifkan kamera untuk mengambil foto wajah.','blue');
+  renderPhotoDots(0);
+  g('photoCount').textContent='0 / '+A.PHOTOS_NEEDED+' foto diambil';
+}
+
+async function deleteFace(barcode, nama) {
+  if (!confirm('Hapus data wajah '+nama+'?')) return;
+  try {
+    var r = await api('deleteFaceDescriptors', {barcode:barcode});
+    showToast(r.status==='sukses'?'✅ Data wajah '+nama+' dihapus':'❌ Gagal hapus');
+    loadEmployees();
+  } catch(e) { showToast('❌ Error'); }
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function renderPhotoDots(n) {
+  var html='';
+  for(var i=1;i<=A.PHOTOS_NEEDED;i++){
+    var cls=i<=n?'done':i===n+1?'active':'';
+    html+='<div class="dot '+cls+'">'+(i<=n?'✓':i)+'</div>';
+  }
+  var el=g('photoDots'); if(el) el.innerHTML=html;
+}
+
+function setRegStatus(msg){var el=g('regStatus');if(el)el.textContent=msg;}
+function setRegHint(msg,type){var el=g('regHint');if(!el)return;el.textContent=msg;el.className='hint '+(type||'blue');}
+
+async function api(fn, data) {
+  if (APPS_SCRIPT_URL.startsWith('GANTI')) throw new Error('URL belum diisi');
+  var url=APPS_SCRIPT_URL+'?fn='+encodeURIComponent(fn)+'&data='+encodeURIComponent(JSON.stringify(data));
+  var r = await fetch(url,{method:'GET',redirect:'follow'});
+  return await r.json();
+}
+
+function g(id){return document.getElementById(id);}
+function showToast(msg){
+  var t=g('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show');},3000);
+}
+function beep(){
+  try{
+    var c=new(window.AudioContext||window.webkitAudioContext)();
+    var o=c.createOscillator(),gn=c.createGain();
+    o.connect(gn);gn.connect(c.destination);o.type='sine';o.frequency.value=880;
+    gn.gain.setValueAtTime(.2,c.currentTime);gn.gain.exponentialRampToValueAtTime(.001,c.currentTime+.2);
+    o.start();o.stop(c.currentTime+.2);
+  }catch(e){}
+}
+
+init();
+</script>
+</body>
+</html>

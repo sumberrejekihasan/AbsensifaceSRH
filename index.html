@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Absensi Karyawan</title>
+<!-- face-api.js dari CDN — berjalan di GitHub Pages -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<!-- html5-qrcode untuk barcode backup -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{--blue:#1a73e8;--dark:#0d47a1;--green:#10b981;--red:#ef4444;--yellow:#f59e0b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'Segoe UI',system-ui,sans-serif;
+  background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:12px;
+}
+.card{background:white;border-radius:20px;padding:22px 18px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+
+/* HEADER */
+.hdr{text-align:center;margin-bottom:14px}
+.hdr .ico{font-size:36px;margin-bottom:3px}
+.hdr h1{font-size:17px;color:var(--blue);font-weight:700}
+.hdr p{color:#999;font-size:11px;margin-top:2px}
+
+/* JAM */
+.jam-box{background:linear-gradient(135deg,var(--blue),var(--dark));color:white;text-align:center;padding:10px 14px;border-radius:12px;margin-bottom:14px}
+.jam-box .jam{font-size:28px;font-weight:700;letter-spacing:2px}
+.jam-box .tgl{font-size:11px;opacity:.85;margin-top:1px}
+
+/* STEP INDICATOR */
+.steps{display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:16px}
+.step{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1}
+.step-circle{
+  width:32px;height:32px;border-radius:50%;border:2px solid #e0e0e0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;color:#ccc;background:white;
+  transition:all .3s;position:relative;z-index:1;
+}
+.step.done .step-circle{background:var(--green);border-color:var(--green);color:white}
+.step.active .step-circle{background:var(--blue);border-color:var(--blue);color:white;box-shadow:0 0 0 3px rgba(26,115,232,.2)}
+.step-label{font-size:10px;color:#aaa;font-weight:600;text-align:center}
+.step.done .step-label{color:var(--green)}
+.step.active .step-label{color:var(--blue)}
+.step-line{flex:1;height:2px;background:#e0e0e0;margin-top:-18px}
+.step-line.done{background:var(--green)}
+
+/* KAMERA FACE */
+.face-wrap{
+  position:relative;border-radius:14px;overflow:hidden;
+  background:#111;width:100%;aspect-ratio:4/3;margin-bottom:10px;
+}
+#faceVideo{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
+#faceCanvas{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  transform:scaleX(-1);
+}
+.face-overlay{
+  position:absolute;inset:0;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.face-guide{
+  width:55%;aspect-ratio:1/1;border-radius:50%;
+  border:3px solid rgba(255,255,255,.5);
+  box-shadow:0 0 0 9999px rgba(0,0,0,.35);
+  position:relative;
+}
+.face-guide.scanning{border-color:#00d4ff;animation:pulse-border 1s ease-in-out infinite}
+.face-guide.found{border-color:var(--green);animation:none}
+.face-guide.nomatch{border-color:var(--red);animation:shake .4s ease}
+@keyframes pulse-border{0%,100%{box-shadow:0 0 0 9999px rgba(0,0,0,.35),0 0 0 0 rgba(0,212,255,.4)}50%{box-shadow:0 0 0 9999px rgba(0,0,0,.35),0 0 0 8px rgba(0,212,255,.0)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.face-status{
+  position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(transparent,rgba(0,0,0,.7));
+  color:white;font-size:12px;font-weight:600;
+  padding:16px 10px 8px;text-align:center;
+}
+.face-pct{
+  position:absolute;bottom:36px;left:0;right:0;
+  text-align:center;
+}
+.pct-bar-wrap{width:60%;margin:0 auto;background:rgba(255,255,255,.2);border-radius:10px;height:4px}
+.pct-bar{height:4px;border-radius:10px;background:#00d4ff;width:0;transition:width .2s}
+
+/* DETECTED CARD */
+.detected-card{
+  background:linear-gradient(135deg,#f0fdf4,#dcfce7);
+  border:2px solid var(--green);border-radius:12px;
+  padding:14px;margin-bottom:14px;display:none;
+  animation:slideIn .3s ease;
+}
+.detected-card.show{display:block}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.detected-card .emp-name{font-size:17px;font-weight:700;color:#065f46}
+.detected-card .emp-info{font-size:12px;color:#047857;margin-top:3px}
+.detected-card .conf{font-size:11px;color:#10b981;margin-top:4px;font-weight:600}
+
+/* BARCODE SECTION */
+.barcode-sec{display:none;margin-bottom:12px}
+.barcode-sec.show{display:block}
+.barcode-label{font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;text-align:center}
+#barcodeReader{border-radius:10px;overflow:hidden;background:#111}
+.or-divider{text-align:center;color:#aaa;font-size:12px;margin:8px 0;font-weight:600}
+.manual-bc{display:flex;gap:8px;margin-top:8px}
+.manual-bc input{
+  flex:1;padding:10px 12px;border:2px solid #e0e0e0;border-radius:9px;
+  font-size:16px;text-align:center;letter-spacing:2px;font-weight:600;outline:none;
+  transition:border-color .2s;
+}
+.manual-bc input:focus{border-color:var(--blue)}
+.manual-bc button{
+  padding:10px 14px;border:none;border-radius:9px;
+  background:var(--blue);color:white;font-weight:700;cursor:pointer;font-size:13px;
+}
+
+/* HINT */
+.hint{padding:9px 12px;border-radius:9px;font-size:12px;text-align:center;margin-bottom:10px;font-weight:500;line-height:1.5}
+.hint.blue{background:#eff6ff;color:#1e40af}
+.hint.yellow{background:#fef3c7;color:#92400e}
+.hint.red{background:#fee2e2;color:#991b1b}
+.hint.green{background:#d1fae5;color:#065f46}
+
+/* LOADING MODEL */
+.model-loading{
+  background:#f8f9fa;border-radius:12px;padding:18px;text-align:center;margin-bottom:12px;
+}
+.model-loading .ico{font-size:32px;margin-bottom:8px}
+.model-loading p{font-size:13px;color:#555;font-weight:600}
+.model-loading small{font-size:11px;color:#888;display:block;margin-top:3px}
+.prog-wrap{background:#e0e0e0;border-radius:10px;height:6px;margin-top:10px;overflow:hidden}
+.prog-bar{height:6px;border-radius:10px;background:var(--blue);width:0;transition:width .3s}
+
+/* SHIFT & AKSI */
+.btn{width:100%;padding:12px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;margin-bottom:8px}
+.btn-p{background:linear-gradient(135deg,var(--blue),var(--dark));color:white}
+.btn-p:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(26,115,232,.4)}
+.btn-sh{background:white;border:2px solid var(--blue);color:var(--blue);font-size:13px}
+.btn-sh:hover{background:var(--blue);color:white}
+.btn-ak{border:2px solid;background:white}
+.ak-i{border-color:var(--yellow);color:var(--yellow)}.ak-i:hover{background:var(--yellow);color:white}
+.ak-s{border-color:var(--green);color:var(--green)}.ak-s:hover{background:var(--green);color:white}
+.ak-p{border-color:var(--red);color:var(--red)}.ak-p:hover{background:var(--red);color:white}
+.btn-retry{background:#f1f5f9;border:2px solid #e0e0e0;color:#555;font-size:13px}
+.btn-retry:hover{border-color:#aaa}
+
+/* HASIL */
+.hasil-wrap{text-align:center;padding:10px 0 14px}
+.hasil-ico{font-size:54px;margin-bottom:10px}
+.alert{padding:13px;border-radius:11px;text-align:center;font-weight:600;margin-bottom:12px;line-height:1.7;font-size:13px;white-space:pre-line}
+.a-ok{background:#d1fae5;color:#065f46}
+.a-er{background:#fee2e2;color:#991b1b}
+.a-in{background:#dbeafe;color:#1e40af}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;margin-top:3px}
+.bw{background:#fef3c7;color:#92400e}.bg{background:#d1fae5;color:#065f46}
+
+/* LOADING */
+.loading{text-align:center;padding:22px;color:#888}
+.sp{width:30px;height:30px;border:4px solid #e0e0e0;border-top-color:var(--blue);border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 9px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.sec-ttl{font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+.back{background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;padding:5px 0;display:flex;align-items:center;gap:3px;margin-bottom:12px;font-weight:600}
+.info-box{background:#f8f9fa;border-radius:11px;padding:12px;margin-bottom:12px}
+.info-box .nm{font-size:15px;font-weight:700;color:var(--blue)}
+.info-box .dp{font-size:12px;color:#666;margin-top:3px}
+</style>
+</head>
+<body>
+<div class="card" id="app"></div>
+
+<script>
+// ============================================================
+// ⚙️  KONFIGURASI
+// ============================================================
+var APPS_SCRIPT_URL = 'GANTI_DENGAN_URL_APPS_SCRIPT_ANDA';
+// Model face-api.js (host di GitHub Pages folder /models)
+var MODEL_URL = './models';
+// ============================================================
+
+var S = {
+  step: 'init',          // init | scanning | confirm_barcode | shift | aksi | hasil
+  faceVideo: null,
+  faceStream: null,
+  scanInterval: null,
+  clockTmr: null,
+  qrScanner: null,
+  detectedEmployee: null,  // {barcode, nama, departemen, confidence}
+  curData: null,
+  modelsLoaded: false,
+  labeledDescriptors: [],   // data wajah dari Sheets
+  faceMatcher: null,
+  scanCount: 0,
+  consecutiveMatch: 0,      // berapa frame berturut-turut cocok
+  MATCH_THRESHOLD: 0.45,    // semakin kecil semakin ketat (0.4–0.6)
+  FRAMES_TO_CONFIRM: 4,     // butuh N frame berturut-turut baru konfirmasi
+};
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  viewLoading('Memuat sistem absensi...');
+  startClock();
+  await loadModels();
+  await loadFaceData();
+  viewScan();
+}
+
+// ── LOAD FACE-API MODELS ─────────────────────────────────────
+async function loadModels() {
+  try {
+    setProgress(10, 'Memuat model deteksi wajah...');
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    setProgress(45, 'Memuat model pengenalan wajah...');
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    setProgress(80, 'Memuat model pencocokan wajah...');
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    setProgress(100, 'Model berhasil dimuat!');
+    S.modelsLoaded = true;
+  } catch(e) {
+    console.error('Model error:', e);
+    S.modelsLoaded = false;
+  }
+}
+
+function setProgress(pct, msg) {
+  var bar = g('progBar'), lbl = g('progLbl');
+  if (bar) bar.style.width = pct + '%';
+  if (lbl) lbl.textContent = msg;
+}
+
+// ── LOAD DATA WAJAH DARI APPS SCRIPT ─────────────────────────
+async function loadFaceData() {
+  if (!S.modelsLoaded) return;
+  try {
+    var data = await api('getFaceDescriptors', {});
+    if (!data || !data.length) return;
+
+    S.labeledDescriptors = data.map(function(emp) {
+      // descriptor disimpan sebagai array Float32 di Sheets
+      var descriptors = emp.descriptors.map(function(d) {
+        return new Float32Array(d);
+      });
+      return new faceapi.LabeledFaceDescriptors(emp.barcode + '|' + emp.nama + '|' + emp.departemen, descriptors);
+    });
+
+    if (S.labeledDescriptors.length > 0) {
+      S.faceMatcher = new faceapi.FaceMatcher(S.labeledDescriptors, S.MATCH_THRESHOLD);
+    }
+  } catch(e) {
+    console.warn('Face data load error:', e);
+  }
+}
+
+// ============================================================
+// VIEW: SCAN WAJAH
+// ============================================================
+function viewScan() {
+  stopFaceCamera(); stopBarcode(); stopClock();
+  S.consecutiveMatch = 0; S.detectedEmployee = null;
+
+  var noFaceData = !S.faceMatcher;
+  var noModel    = !S.modelsLoaded;
+
+  g('app').innerHTML =
+    '<div class="hdr"><div class="ico">👁️</div><h1>ABSENSI KARYAWAN</h1><p>Identifikasi Wajah + Konfirmasi Barcode</p></div>' +
+    '<div class="jam-box"><div class="jam" id="clk">--:--:--</div><div class="tgl" id="dt">...</div></div>' +
+
+    // STEPS
+    '<div class="steps">' +
+      '<div class="step active" id="s1"><div class="step-circle">1</div><div class="step-label">Scan Wajah</div></div>' +
+      '<div class="step-line" id="sl1"></div>' +
+      '<div class="step" id="s2"><div class="step-circle">2</div><div class="step-label">Konfirmasi</div></div>' +
+      '<div class="step-line" id="sl2"></div>' +
+      '<div class="step" id="s3"><div class="step-circle">3</div><div class="step-label">Pilih Aksi</div></div>' +
+    '</div>' +
+
+    (noModel
+      ? '<div class="hint red">❌ Model AI gagal dimuat. Refresh halaman atau cek koneksi internet.</div>'
+      : noFaceData
+        ? '<div class="hint yellow">⚠️ Belum ada data wajah karyawan. Admin perlu mendaftarkan wajah terlebih dahulu di halaman Admin.</div>'
+        : '') +
+
+    // KAMERA WAJAH
+    '<div class="face-wrap" id="faceWrap">' +
+      '<video id="faceVideo" autoplay playsinline muted></video>' +
+      '<canvas id="faceCanvas"></canvas>' +
+      '<div class="face-overlay"><div class="face-guide" id="faceGuide"></div></div>' +
+      '<div class="face-pct"><div class="pct-bar-wrap"><div class="pct-bar" id="pctBar"></div></div></div>' +
+      '<div class="face-status" id="faceStatus">Memulai kamera...</div>' +
+    '</div>' +
+
+    '<div class="detected-card" id="detectedCard">' +
+      '<div class="emp-name" id="detName">-</div>' +
+      '<div class="emp-info" id="detInfo">-</div>' +
+      '<div class="conf" id="detConf">-</div>' +
+    '</div>' +
+
+    '<div class="hint blue" id="faceHint">Posisikan wajah di dalam lingkaran</div>' +
+
+    '<button class="btn btn-retry" onclick="refreshFaceData()" style="margin-top:4px">🔄 Refresh Data Wajah</button>';
+
+  startClock();
+  setTimeout(startFaceCamera, 300);
+}
+
+// ── KAMERA WAJAH ─────────────────────────────────────────────
+async function startFaceCamera() {
+  var tries = [
+    {video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}},
+    {video:{facingMode:'user'}},
+    {video:true}
+  ];
+  var stream = null;
+  for (var i = 0; i < tries.length; i++) {
+    try { stream = await navigator.mediaDevices.getUserMedia(tries[i]); break; }
+    catch(e) {
+      if (e.name==='NotAllowedError') {
+        setFaceStatus('⛔ Izin kamera ditolak'); setHint('Izinkan akses kamera di pengaturan browser.','red'); return;
+      }
+    }
+  }
+  if (!stream) { setFaceStatus('❌ Kamera gagal'); setHint('Kamera tidak bisa dibuka.','red'); return; }
+
+  S.faceStream = stream;
+  var vid = g('faceVideo');
+  if (!vid) { stream.getTracks().forEach(function(t){t.stop();}); return; }
+  vid.srcObject = stream;
+
+  setFaceStatus('📷 Arahkan wajah ke kamera');
+
+  if (!S.modelsLoaded || !S.faceMatcher) {
+    setHint('Model AI atau data wajah belum tersedia. Gunakan barcode saja.','yellow');
+    return;
+  }
+
+  await vid.play().catch(function(){});
+  startFaceScan(vid);
+}
+
+async function startFaceScan(vid) {
+  if (S.scanInterval) clearInterval(S.scanInterval);
+
+  S.scanInterval = setInterval(async function() {
+    if (!vid || vid.readyState < 2 || !S.faceMatcher) return;
+
+    try {
+      var result = await faceapi
+        .detectSingleFace(vid, new faceapi.TinyFaceDetectorOptions({inputSize:224, scoreThreshold:0.4}))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      var guide = g('faceGuide');
+
+      if (!result) {
+        S.consecutiveMatch = 0;
+        if (guide) guide.className = 'face-guide';
+        setFaceStatus('🔍 Cari wajah di kamera...');
+        setPct(0);
+        return;
+      }
+
+      // Ada wajah — coba cocokkan
+      if (guide) guide.className = 'face-guide scanning';
+      var match = S.faceMatcher.findBestMatch(result.descriptor);
+      var distance = match.distance;
+      var confidence = Math.max(0, Math.round((1 - distance / S.MATCH_THRESHOLD) * 100));
+
+      setPct(confidence);
+
+      if (match.label !== 'unknown') {
+        S.consecutiveMatch++;
+        setFaceStatus('✅ Wajah dikenali... (' + S.consecutiveMatch + '/' + S.FRAMES_TO_CONFIRM + ')');
+
+        if (S.consecutiveMatch >= S.FRAMES_TO_CONFIRM) {
+          // MATCH CONFIRMED
+          clearInterval(S.scanInterval); S.scanInterval = null;
+          if (guide) guide.className = 'face-guide found';
+
+          var parts = match.label.split('|');
+          S.detectedEmployee = { barcode: parts[0], nama: parts[1], departemen: parts[2], confidence: confidence };
+
+          beep('success');
+          showDetectedCard(S.detectedEmployee);
+          setTimeout(function() { viewConfirmBarcode(S.detectedEmployee); }, 1200);
+        }
+      } else {
+        S.consecutiveMatch = Math.max(0, S.consecutiveMatch - 1);
+        setFaceStatus('👤 Wajah terdeteksi, mencocokkan... ' + confidence + '%');
+      }
+    } catch(e) {}
+  }, 400);
+}
+
+function stopFaceCamera() {
+  if (S.scanInterval) { clearInterval(S.scanInterval); S.scanInterval = null; }
+  if (S.faceStream) { S.faceStream.getTracks().forEach(function(t){t.stop();}); S.faceStream = null; }
+  var v = g('faceVideo'); if (v) v.srcObject = null;
+}
+
+function showDetectedCard(emp) {
+  var card = g('detectedCard'), nm = g('detName'), inf = g('detInfo'), cf = g('detConf');
+  if (!card) return;
+  if (nm) nm.textContent = '👤 ' + emp.nama;
+  if (inf) inf.textContent = '🏢 ' + emp.departemen + ' • ID: ' + emp.barcode;
+  if (cf) cf.textContent = '✅ Keyakinan pencocokan: ' + emp.confidence + '%';
+  card.classList.add('show');
+}
+
+function setFaceStatus(msg) { var el=g('faceStatus'); if(el) el.textContent=msg; }
+function setHint(msg,type) { var el=g('faceHint'); if(!el)return; el.textContent=msg; el.className='hint '+(type||'blue'); }
+function setPct(val) { var el=g('pctBar'); if(el) el.style.width=Math.min(100,val)+'%'; }
+
+// ── REFRESH DATA WAJAH ────────────────────────────────────────
+async function refreshFaceData() {
+  setFaceStatus('🔄 Mengambil data wajah...');
+  await loadFaceData();
+  if (S.faceMatcher) {
+    setFaceStatus('✅ Data wajah diperbarui!');
+    setHint('Data wajah berhasil diperbarui. Siap scan.','green');
+  } else {
+    setHint('Belum ada data wajah. Hubungi Admin.','yellow');
+  }
+}
+
+// ============================================================
+// VIEW: KONFIRMASI BARCODE
+// ============================================================
+function viewConfirmBarcode(emp) {
+  stopFaceCamera();
+  S.step = 'confirm_barcode';
+
+  setStep(2);
+
+  g('app').innerHTML =
+    '<div class="hdr"><div class="ico">👁️</div><h1>ABSENSI KARYAWAN</h1><p>Identifikasi Wajah + Konfirmasi Barcode</p></div>' +
+    '<div class="jam-box"><div class="jam" id="clk">--:--:--</div><div class="tgl" id="dt">...</div></div>' +
+
+    stepsHTML(2) +
+
+    // Card karyawan terdeteksi
+    '<div class="detected-card show">' +
+      '<div class="emp-name">👤 ' + emp.nama + '</div>' +
+      '<div class="emp-info">🏢 ' + emp.departemen + ' • ' + emp.confidence + '% cocok</div>' +
+    '</div>' +
+
+    '<div class="hint green">✅ Wajah berhasil diidentifikasi! Scan barcode ID untuk konfirmasi.</div>' +
+
+    '<div class="barcode-sec show">' +
+      '<div class="barcode-label">📲 Scan Barcode / Kartu ID</div>' +
+      '<div id="barcodeReader"></div>' +
+      '<div class="or-divider">— atau ketik manual —</div>' +
+      '<div class="manual-bc">' +
+        '<input type="text" id="bcInput" placeholder="ID Karyawan..." autocomplete="off">' +
+        '<button onclick="doConfirmBarcode()">✓</button>' +
+      '</div>' +
+    '</div>' +
+
+    '<button class="btn btn-retry" onclick="viewScan()" style="margin-top:8px">↩ Scan Ulang Wajah</button>';
+
+  startClock();
+  setupManualBarcode();
+  setTimeout(startBarcodeScanner, 300);
+}
+
+function setupManualBarcode() {
+  var inp = g('bcInput'); if (!inp) return;
+  inp.addEventListener('keypress', function(e){ if(e.key==='Enter') doConfirmBarcode(); });
+  var t; inp.addEventListener('input', function(){
+    clearTimeout(t); t=setTimeout(function(){ if(inp.value.trim().length>=3) doConfirmBarcode(); },700);
+  });
+}
+
+function startBarcodeScanner() {
+  if (!g('barcodeReader') || typeof Html5Qrcode==='undefined') return;
+  S.qrScanner = new Html5Qrcode('barcodeReader');
+  var cfg = {
+    fps:10,
+    qrbox:function(w,h){var s=Math.round(Math.min(w,h)*.6);return{width:s,height:s}},
+    formatsToSupport:[
+      Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.EAN_13
+    ]
+  };
+  Html5Qrcode.getCameras().then(function(cams){
+    if(!cams||!cams.length) return;
+    var cam=cams[cams.length-1];
+    for(var i=0;i<cams.length;i++){if(/back|rear|env/i.test(cams[i].label)){cam=cams[i];break;}}
+    S.qrScanner.start(cam.id,cfg,function(txt){
+      beep('scan'); stopBarcode(); setTimeout(function(){confirmBarcodeValue(txt);},400);
+    },function(){}).catch(function(){
+      S.qrScanner.start({facingMode:'environment'},cfg,function(txt){
+        beep('scan'); stopBarcode(); setTimeout(function(){confirmBarcodeValue(txt);},400);
+      },function(){}).catch(function(){});
+    });
+  }).catch(function(){});
+}
+
+function stopBarcode() {
+  if (S.qrScanner) {
+    try { S.qrScanner.stop().catch(function(){}); } catch(e) {}
+    S.qrScanner = null;
+  }
+}
+
+function doConfirmBarcode() {
+  var inp=g('bcInput'); if(!inp||!inp.value.trim()) return;
+  stopBarcode();
+  confirmBarcodeValue(inp.value.trim());
+}
+
+function confirmBarcodeValue(barcode) {
+  if (!S.detectedEmployee) { viewScan(); return; }
+
+  // Cocokkan barcode dengan wajah yang terdeteksi
+  if (String(barcode).trim() !== String(S.detectedEmployee.barcode).trim()) {
+    // TIDAK COCOK
+    beep('error');
+    g('app').innerHTML =
+      '<div class="hasil-wrap">' +
+      '<div class="hasil-ico">⚠️</div>' +
+      '<div class="alert" style="background:#fef3c7;color:#92400e">' +
+        'Barcode tidak cocok dengan wajah yang teridentifikasi.\n\n' +
+        'Wajah: ' + S.detectedEmployee.nama + '\n' +
+        'Barcode: ' + barcode +
+      '</div></div>' +
+      '<button class="btn btn-retry" onclick="viewScan()">↩ Coba Lagi</button>';
+    return;
+  }
+
+  // COCOK — proses absensi
+  loading('Memproses absensi...');
+  api('prosesAbsensi', { barcode: barcode }, onResp, onErr);
+}
+
+// ============================================================
+// RESPONSE HANDLER
+// ============================================================
+function onResp(d) {
+  if (d.status==='pilih_shift') vShift(d);
+  else if (d.status==='pilih_aksi') vAksi(d);
+  else vHasil(d);
+}
+function onErr(e) { vHasil({status:'error',pesan:'Gagal terhubung ke server.\n'+(e.message||'')}); }
+
+function vShift(d) {
+  S.curData=d; setStep(3);
+  var btns=Object.entries(d.shifts).map(function(e){
+    return '<button class="btn btn-sh" onclick="doShift(\''+e[0]+'\')">Shift '+e[0]+': '+e[1].label+'</button>';
+  }).join('');
+  g('app').innerHTML=
+    stepsHTML(3)+
+    '<div class="info-box"><div class="nm">👤 '+d.karyawan.nama+'</div>'+
+    '<div class="dp">🏢 '+d.karyawan.departemen+' | '+d.jam+'</div></div>'+
+    '<div class="sec-ttl">Pilih Shift Kerja</div>'+btns+
+    '<button class="btn btn-retry" onclick="viewScan()" style="margin-top:4px">↩ Kembali</button>';
+}
+
+function vAksi(d) {
+  S.curData=d; setStep(3);
+  var btns=d.opsi.map(function(o){
+    var c='btn-ak';
+    if(o.value==='mulai_istirahat') c+=' ak-i';
+    if(o.value==='selesai_istirahat') c+=' ak-s';
+    if(o.value==='pulang') c+=' ak-p';
+    return '<button class="btn '+c+'" onclick="doAksi(\''+o.value+'\')">'+o.label+'</button>';
+  }).join('');
+  var im=d.statusHariIni.jamMasuk?'<div class="dp">✅ Masuk: '+d.statusHariIni.jamMasuk+' | Shift '+d.statusHariIni.shift+'</div>':'';
+  var ii=d.statusHariIni.mulaiIstirahat?'<div class="dp">🍽️ Istirahat: '+d.statusHariIni.mulaiIstirahat+(d.statusHariIni.selesaiIstirahat?' – '+d.statusHariIni.selesaiIstirahat:' (sedang)')+'</div>':'';
+  g('app').innerHTML=
+    stepsHTML(3)+
+    '<div class="info-box"><div class="nm">👤 '+d.karyawan.nama+'</div>'+
+    '<div class="dp">🏢 '+d.karyawan.departemen+'</div>'+im+ii+
+    '<div class="dp">🕐 '+d.jam+'</div></div>'+
+    '<div class="sec-ttl">Pilih Aksi</div>'+btns;
+}
+
+function vHasil(h) {
+  stopFaceCamera(); stopBarcode(); stopClock();
+  var cls=h.status==='error'?'a-er':h.status==='info'?'a-in':'a-ok';
+  var ex=(h.keterlambatan>0?'<div class="badge bw">⚠️ Terlambat '+h.keterlambatan+' mnt</div>':'')+
+         (h.lembur>0?'<div class="badge bg">⏰ Lembur '+h.lembur+' mnt</div>':'');
+  g('app').innerHTML=
+    '<div class="hasil-wrap">'+
+    '<div class="hasil-ico">'+emj(h)+'</div>'+
+    '<div class="alert '+cls+'">'+h.pesan+'</div>'+ex+'</div>'+
+    '<button class="btn btn-p" onclick="viewScan()">🔄 Absen Berikutnya</button>';
+  setTimeout(viewScan, 6000);
+}
+
+// ── AKSI ──────────────────────────────────────────────────────
+function doShift(sh) {
+  loading('Mencatat absensi masuk...');
+  api('konfirmasiAbsensi',{barcode:S.curData.barcode,aksi:'masuk',shift:sh},onResp,onErr);
+}
+function doAksi(ak) {
+  var m={mulai_istirahat:'Mencatat istirahat...',selesai_istirahat:'Mencatat selesai istirahat...',pulang:'Mencatat absen pulang...'};
+  loading(m[ak]||'Memproses...');
+  api('konfirmasiAbsensi',{barcode:S.curData.barcode,aksi:ak},onResp,onErr);
+}
+
+// ============================================================
+// API
+// ============================================================
+function api(fn, data, ok, fail) {
+  ok   = ok   || function(){};
+  fail = fail || function(){};
+  if (APPS_SCRIPT_URL.startsWith('GANTI')) { fail({message:'URL belum diisi!'}); return; }
+  var url = APPS_SCRIPT_URL+'?fn='+encodeURIComponent(fn)+'&data='+encodeURIComponent(JSON.stringify(data));
+  fetch(url,{method:'GET',redirect:'follow'})
+    .then(function(r){return r.json();})
+    .then(ok).catch(fail);
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function g(id){return document.getElementById(id);}
+
+function loading(msg){
+  stopClock();
+  g('app').innerHTML='<div class="loading"><div class="sp"></div><p>'+(msg||'...')+'</p></div>';
+}
+
+function viewLoading(msg) {
+  g('app').innerHTML=
+    '<div class="model-loading">'+
+    '<div class="ico">🤖</div>'+
+    '<p>'+msg+'</p>'+
+    '<small id="progLbl">Menyiapkan...</small>'+
+    '<div class="prog-wrap"><div class="prog-bar" id="progBar"></div></div>'+
+    '</div>';
+}
+
+function stepsHTML(active) {
+  function sc(n) {
+    var cls = n < active ? 'done' : n===active ? 'active' : '';
+    var lbl = ['','Scan Wajah','Konfirmasi','Pilih Aksi'][n];
+    var ico = n < active ? '✓' : n;
+    return '<div class="step '+cls+'" id="s'+n+'"><div class="step-circle">'+ico+'</div><div class="step-label">'+lbl+'</div></div>';
+  }
+  function sl(n) { return '<div class="step-line'+(n<active?' done':'')+'" id="sl'+n+'"></div>'; }
+  return '<div class="steps">'+sc(1)+sl(1)+sc(2)+sl(2)+sc(3)+'</div>';
+}
+
+function setStep(n) {
+  // Dipanggil saat tidak ada DOM steps — steps di-render ulang via stepsHTML
+}
+
+function startClock() {
+  stopClock();
+  function tick(){
+    var now=new Date();
+    var c=g('clk'),d=g('dt');
+    if(c)c.textContent=now.toLocaleTimeString('id-ID');
+    if(d)d.textContent=now.toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  }
+  tick(); S.clockTmr=setInterval(tick,1000);
+}
+function stopClock(){if(S.clockTmr){clearInterval(S.clockTmr);S.clockTmr=null;}}
+function fdt(t){return new Date(t).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});}
+function emj(h){
+  if(h.status==='error')return'❌';if(h.aksi==='masuk')return'👋';
+  if(h.aksi==='mulai_istirahat')return'🍽️';if(h.aksi==='selesai_istirahat')return'💪';
+  if(h.aksi==='pulang')return'🏠';return'✅';
+}
+function beep(type) {
+  try {
+    var ctx=new(window.AudioContext||window.webkitAudioContext)();
+    var o=ctx.createOscillator(),gn=ctx.createGain();
+    o.connect(gn);gn.connect(ctx.destination);
+    if(type==='success'){o.type='sine';o.frequency.value=880;}
+    else if(type==='error'){o.type='square';o.frequency.value=220;}
+    else{o.type='sine';o.frequency.value=660;}
+    gn.gain.setValueAtTime(.3,ctx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.3);
+    o.start();o.stop(ctx.currentTime+.3);
+  }catch(e){}
+}
+
+init();
+</script>
+</body>
+</html>
